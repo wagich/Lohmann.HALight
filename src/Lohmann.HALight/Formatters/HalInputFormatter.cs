@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Buffers;
 using System.Reflection;
-using Lohmann.HALight.Formatters.Internal;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
@@ -12,26 +11,18 @@ namespace Lohmann.HALight.Formatters
 {
     public class HalInputFormatter : JsonInputFormatter
     {
-        public HalInputFormatter(
-            ILogger logger)
-            : this(
-                  logger, 
-                  HalJsonSerializerSettingsProvider.CreateSerializerSettings(), 
-                  ArrayPool<char>.Shared,
-                  new DefaultObjectPoolProvider())
+        public HalInputFormatter(ILogger logger)
+            : this(logger, HalJsonSerializerSettingsProvider.CreateDefaultSerializerSettings(), ArrayPool<char>.Shared, new DefaultObjectPoolProvider())
+        {
+        }
+
+        public HalInputFormatter(ILogger logger, JsonSerializerSettings serializerSettings)
+            : this(logger, serializerSettings, ArrayPool<char>.Shared, new DefaultObjectPoolProvider())
         {
         }
             
-        public HalInputFormatter(
-            ILogger logger, 
-            JsonSerializerSettings serializerSettings, 
-            ArrayPool<char> charPool, 
-            ObjectPoolProvider objectPoolProvider)
-            : base(
-                  logger, 
-                  HalJsonSerializerSettingsProvider.AppendHalConverters(serializerSettings), 
-                  charPool, 
-                  objectPoolProvider)
+        public HalInputFormatter(ILogger logger, JsonSerializerSettings serializerSettings, ArrayPool<char> charPool, ObjectPoolProvider objectPoolProvider)
+            : base(logger, HalJsonSerializerSettingsProvider.AppendHalConverters(serializerSettings), charPool, objectPoolProvider)
         {
             SupportedMediaTypes.Add(new MediaTypeHeaderValue(HalJsonSerializerSettingsProvider.HalMediaType));
         }

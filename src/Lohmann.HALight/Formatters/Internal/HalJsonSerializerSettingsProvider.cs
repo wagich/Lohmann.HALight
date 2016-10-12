@@ -2,12 +2,12 @@ using Lohmann.HALight.Converters;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-namespace Lohmann.HALight.Formatters.Internal
+namespace Lohmann.HALight.Formatters
 {
     /// <summary>
     /// Helper class which provides <see cref="JsonSerializerSettings"/>.
     /// </summary>
-    internal static class HalJsonSerializerSettingsProvider
+    public static class HalJsonSerializerSettingsProvider
     {
         public const string HalMediaType = "application/hal+json";
 
@@ -17,7 +17,7 @@ namespace Lohmann.HALight.Formatters.Internal
         /// Creates default <see cref="JsonSerializerSettings"/>.
         /// </summary>
         /// <returns>Default <see cref="JsonSerializerSettings"/>.</returns>
-        public static JsonSerializerSettings CreateSerializerSettings()
+        public static JsonSerializerSettings CreateDefaultSerializerSettings()
         {
             var settings = new JsonSerializerSettings
             {
