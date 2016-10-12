@@ -62,28 +62,20 @@ namespace Lohmann.HALight.Converters
             {
                 var currentResourceDynamic = (dynamic) currentResource;
                 var jArray = new JArray();
-                string name = "";
                 foreach (IResource resourceItem in currentResourceDynamic.Items)
                 {
                     var embeddedResourceNodeValue = new JObject();
                     ConvertRecursively(resourceItem, embeddedResourceNodeValue, serializer);
                     jArray.Add(embeddedResourceNodeValue);
-                    name =  resourceItem.GetType().Name;
                 }
 
-                // Remove the "Resource" by convention.
-                if (name.EndsWith("Resource"))
-                {
-                    name = name.Remove(name.LastIndexOf("Resource", StringComparison.Ordinal));
-                }
-
-                embeddedResourceObject.Add(ToCamelCase(name), jArray);
+                embeddedResourceObject.Add("items", jArray);
             }
 
             foreach (var nonResourceProperty in nonResourceProperties)
             {
                 var value = nonResourceProperty.GetValue(currentResource);
-                if (value != null && value.GetType().GetTypeInfo().IsClass && value.GetType() != typeof(string))
+                if (value != null && (value.GetType().GetTypeInfo().IsClass && value.GetType() != typeof(string) || value.GetType().GetTypeInfo().IsEnum))
                 {
                     node.Add(ToCamelCase(nonResourceProperty.Name), JToken.FromObject(value, serializer));
                 }
