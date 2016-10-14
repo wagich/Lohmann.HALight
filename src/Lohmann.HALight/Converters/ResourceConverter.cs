@@ -75,7 +75,14 @@ namespace Lohmann.HALight.Converters
 			foreach (var nonResourceProperty in nonResourceProperties)
 			{
 				var value = nonResourceProperty.GetValue(currentResource);
-				node.Add(ToCamelCase(nonResourceProperty.Name), JToken.FromObject(value, serializer));
+				if (value != null)
+				{
+					node.Add(ToCamelCase(nonResourceProperty.Name), JToken.FromObject(value, serializer));
+				}
+				else
+				{
+					node.Add(ToCamelCase(nonResourceProperty.Name), new JValue(value));
+				}
 			}
 		}
 
