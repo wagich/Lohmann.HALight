@@ -1,237 +1,230 @@
 namespace Lohmann.HALight.Converters
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Reflection;
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Linq;
+	using System;
+	using System.Collections.Generic;
+	using System.Linq;
+	using System.Reflection;
+	using Newtonsoft.Json;
+	using Newtonsoft.Json.Linq;
 
-    public class ResourceConverter : JsonConverter
-    {
-        public class ReservedPropertyNames
-        {
-            public const string Relations = "_links";
-            public const string EmbeddedResources = "_embedded";
+	public class ResourceConverter : JsonConverter
+	{
+		public class ReservedPropertyNames
+		{
+			public const string Relations = "_links";
+			public const string EmbeddedResources = "_embedded";
 
-            public static IEnumerable<string> Names
-            {
-                get
-                {
-                    yield return Relations;
-                    yield return EmbeddedResources;
-                }
-            }
-        }
-        
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-        {
-            serializer.Converters.Remove(this);
-            var root = new JObject();
-            ConvertRecursively((IResource)value, root, serializer);
-            root.WriteTo(writer);
-            serializer.Converters.Add(this);
-        }
+			public static IEnumerable<string> Names
+			{
+				get
+				{
+					yield return Relations;
+					yield return EmbeddedResources;
+				}
+			}
+		}
 
-        private static void ConvertRecursively(IResource currentResource, JObject node, JsonSerializer serializer)
-        {
-            if (currentResource == null)
-            {
-                return;
-            }
+		public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+		{
+			serializer.Converters.Remove(this);
+			var root = new JObject();
+			ConvertRecursively((IResource)value, root, serializer);
+			root.WriteTo(writer);
+			serializer.Converters.Add(this);
+		}
 
-            var currentResourceType = currentResource.GetType();
-            var readableProperties = GetReadablePropertyInfos(currentResourceType);
+		private static void ConvertRecursively(IResource currentResource, JObject node, JsonSerializer serializer)
+		{
+			if (currentResource == null)
+			{
+				return;
+			}
 
-            var nonResourceProperties = readableProperties.Where(IsNeitherResourceOrReservedProperty).ToList();
-            var resourceProperties = readableProperties.Where(IsResourceProperty).ToList();
+			var currentResourceType = currentResource.GetType();
+			var readableProperties = GetReadablePropertyInfos(currentResourceType);
 
-            node.Add(ReservedPropertyNames.Relations, JObject.FromObject(currentResource.Relations, serializer));
-            var embeddedResourceObject = new JObject();
-            node.Add(ReservedPropertyNames.EmbeddedResources, embeddedResourceObject);
+			var nonResourceProperties = readableProperties.Where(IsNeitherResourceOrReservedProperty).ToList();
+			var resourceProperties = readableProperties.Where(IsResourceProperty).ToList();
 
-            foreach (var resourceProperty in resourceProperties)
-            {                
-                var embeddedResourceNodeValue = new JObject();
+			node.Add(ReservedPropertyNames.Relations, JObject.FromObject(currentResource.Relations, serializer));
+			var embeddedResourceObject = new JObject();
+			node.Add(ReservedPropertyNames.EmbeddedResources, embeddedResourceObject);
 
-                ConvertRecursively((IResource)resourceProperty.GetValue(currentResource), embeddedResourceNodeValue, serializer);
-                embeddedResourceObject.Add(ToCamelCase(resourceProperty.Name), embeddedResourceNodeValue);
-            }
+			foreach (var resourceProperty in resourceProperties)
+			{
+				var embeddedResourceNodeValue = new JObject();
 
-            if (IsCollectionResourceType(currentResourceType))
-            {
-                var currentResourceDynamic = (dynamic) currentResource;
-                var jArray = new JArray();
-                foreach (IResource resourceItem in currentResourceDynamic.Items)
-                {
-                    var embeddedResourceNodeValue = new JObject();
-                    ConvertRecursively(resourceItem, embeddedResourceNodeValue, serializer);
-                    jArray.Add(embeddedResourceNodeValue);
-                }
+				ConvertRecursively((IResource)resourceProperty.GetValue(currentResource), embeddedResourceNodeValue, serializer);
+				embeddedResourceObject.Add(ToCamelCase(resourceProperty.Name), embeddedResourceNodeValue);
+			}
 
-                embeddedResourceObject.Add("items", jArray);
-            }
+			if (IsCollectionResourceType(currentResourceType))
+			{
+				var currentResourceDynamic = (dynamic)currentResource;
+				var jArray = new JArray();
+				foreach (IResource resourceItem in currentResourceDynamic.Items)
+				{
+					var embeddedResourceNodeValue = new JObject();
+					ConvertRecursively(resourceItem, embeddedResourceNodeValue, serializer);
+					jArray.Add(embeddedResourceNodeValue);
+				}
 
-            foreach (var nonResourceProperty in nonResourceProperties)
-            {
-                var value = nonResourceProperty.GetValue(currentResource);
-                if (value != null && (value.GetType().GetTypeInfo().IsClass && value.GetType() != typeof(string) || value.GetType().GetTypeInfo().IsEnum))
-                {
-                    node.Add(ToCamelCase(nonResourceProperty.Name), JToken.FromObject(value, serializer));
-                }
-                else
-                {
-                    node.Add(ToCamelCase(nonResourceProperty.Name), new JValue(value));
-                }                
-            }
-        }
+				embeddedResourceObject.Add("items", jArray);
+			}
 
-        private static bool IsResourceProperty(PropertyInfo propertyInfo)
-        {
-            return IsResourceType(propertyInfo.PropertyType);
-        }
+			foreach (var nonResourceProperty in nonResourceProperties)
+			{
+				var value = nonResourceProperty.GetValue(currentResource);
+				node.Add(ToCamelCase(nonResourceProperty.Name), JToken.FromObject(value, serializer));
+			}
+		}
 
-        private static bool IsCollectionResourceType(Type type)
-        {
-            return
-                type.GetInterfaces()
-                    .Any(x => x.GetTypeInfo().IsGenericType && x.GetGenericTypeDefinition() == typeof(ICollectionResource<>));
-        }
+		private static bool IsResourceProperty(PropertyInfo propertyInfo)
+		{
+			return IsResourceType(propertyInfo.PropertyType);
+		}
 
-        private static bool IsResourceType(Type type)
-        {
-            return typeof(IResource).IsAssignableFrom(type);
-        }
+		private static bool IsCollectionResourceType(Type type)
+		{
+			return
+				type.GetInterfaces()
+					.Any(x => x.GetTypeInfo().IsGenericType && x.GetGenericTypeDefinition() == typeof(ICollectionResource<>));
+		}
 
-        private static bool IsNeitherResourceOrReservedProperty(PropertyInfo propertyInfo)
-        {
-            return !IsResourceProperty(propertyInfo) && !IsReservedProperty(propertyInfo);
-        }
+		private static bool IsResourceType(Type type)
+		{
+			return typeof(IResource).IsAssignableFrom(type);
+		}
 
-        private static List<PropertyInfo> GetReadablePropertyInfos(Type type)
-        {
-            return type.GetRuntimeProperties().Where(_ => _.CanRead).ToList();
-        }
+		private static bool IsNeitherResourceOrReservedProperty(PropertyInfo propertyInfo)
+		{
+			return !IsResourceProperty(propertyInfo) && !IsReservedProperty(propertyInfo);
+		}
 
-        private static bool IsReservedProperty(PropertyInfo propertyInfo)
-        {
-            var res = false;
+		private static List<PropertyInfo> GetReadablePropertyInfos(Type type)
+		{
+			return type.GetRuntimeProperties().Where(_ => _.CanRead).ToList();
+		}
 
-            if (IsCollectionResourceType(propertyInfo.DeclaringType))
-            {
-                var interfacePropertyNames = typeof(ICollectionResource<>).GetRuntimeProperties().Where(_ => _.CanRead).Select(_ => _.Name).ToList();
-                res |= interfacePropertyNames.Any(propertyName => propertyInfo.Name == propertyName);
-            }
+		private static bool IsReservedProperty(PropertyInfo propertyInfo)
+		{
+			var res = false;
 
-            if (IsResourceType(propertyInfo.DeclaringType))
-            {
-                var resourceProperties = typeof(IResource).GetRuntimeProperties().Where(_ => _.CanRead).Select(_ => _.Name).ToList();
-                res |= resourceProperties.Any(propertyName => propertyInfo.Name == propertyName);
-            }
+			if (IsCollectionResourceType(propertyInfo.DeclaringType))
+			{
+				var interfacePropertyNames = typeof(ICollectionResource<>).GetRuntimeProperties().Where(_ => _.CanRead).Select(_ => _.Name).ToList();
+				res |= interfacePropertyNames.Any(propertyName => propertyInfo.Name == propertyName);
+			}
 
-            return res;
-        }
+			if (IsResourceType(propertyInfo.DeclaringType))
+			{
+				var resourceProperties = typeof(IResource).GetRuntimeProperties().Where(_ => _.CanRead).Select(_ => _.Name).ToList();
+				res |= resourceProperties.Any(propertyName => propertyInfo.Name == propertyName);
+			}
 
-        public static string ToCamelCase(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-            {
-                return s;
-            }
+			return res;
+		}
 
-            if (!char.IsUpper(s[0]))
-            {
-                return s;
-            }
+		public static string ToCamelCase(string s)
+		{
+			if (string.IsNullOrEmpty(s))
+			{
+				return s;
+			}
 
-            var chars = s.ToCharArray();
+			if (!char.IsUpper(s[0]))
+			{
+				return s;
+			}
 
-            for (var i = 0; i < chars.Length; i++)
-            {
-                var hasNext = (i + 1 < chars.Length);
-                if (i > 0 && hasNext && !char.IsUpper(chars[i + 1]))
-                    break;
+			var chars = s.ToCharArray();
 
-                chars[i] = char.ToLowerInvariant(chars[i]);
-            }
+			for (var i = 0; i < chars.Length; i++)
+			{
+				var hasNext = (i + 1 < chars.Length);
+				if (i > 0 && hasNext && !char.IsUpper(chars[i + 1]))
+					break;
 
-            return new string(chars);
-        }
+				chars[i] = char.ToLowerInvariant(chars[i]);
+			}
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            var currentResourceInstance = (IResource)Activator.CreateInstance(objectType);
-            var jToken = JToken.ReadFrom(reader);
-            if (jToken[ReservedPropertyNames.Relations] != null)
-            {
-                currentResourceInstance.Relations = serializer.Deserialize<Relations>(jToken[ReservedPropertyNames.Relations].CreateReader());
-            }
+			return new string(chars);
+		}
 
-            var simpleProperties =
-                jToken.Where(_ => _.GetType() == typeof (JProperty))
-                    .Cast<JProperty>()
-                    .Where(_ => !ReservedPropertyNames.Names.Contains(_.Name));
+		public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+		{
+			var currentResourceInstance = (IResource)Activator.CreateInstance(objectType);
+			var jToken = JToken.ReadFrom(reader);
+			if (jToken[ReservedPropertyNames.Relations] != null)
+			{
+				currentResourceInstance.Relations = serializer.Deserialize<Relations>(jToken[ReservedPropertyNames.Relations].CreateReader());
+			}
 
-            // Create a new JObject that will receive all "simple" non-reserved properties.
-            // This will be the vehicle to populate the resource instance.
-            var populater = new JObject();
-            foreach (JProperty jProperty in simpleProperties)
-            {
-                populater.Add(jProperty);
-            }
+			var simpleProperties =
+				jToken.Where(_ => _.GetType() == typeof(JProperty))
+					.Cast<JProperty>()
+					.Where(_ => !ReservedPropertyNames.Names.Contains(_.Name));
 
-            serializer.Populate(populater.CreateReader(), currentResourceInstance);
+			// Create a new JObject that will receive all "simple" non-reserved properties.
+			// This will be the vehicle to populate the resource instance.
+			var populater = new JObject();
+			foreach (JProperty jProperty in simpleProperties)
+			{
+				populater.Add(jProperty);
+			}
 
-            if (jToken[ReservedPropertyNames.EmbeddedResources] != null)
-            {
-                JToken embeddedResourceObject = jToken[ReservedPropertyNames.EmbeddedResources];
-                foreach (var embeddedObjectProperty in embeddedResourceObject.Where(_ => _.GetType() == typeof(JProperty)).Cast<JProperty>())
-                {
-                    if (embeddedObjectProperty.Value.GetType() == typeof (JArray))
-                    {
-                        if (objectType.Name.ToLower().Contains(embeddedObjectProperty.Name))
-                        {
-                            var dynamicCurrent = (dynamic)currentResourceInstance;
-                            var itemsProperty = objectType.GetProperty("Items");
-                            var collectionResourceType = itemsProperty.PropertyType.GetGenericArguments().First();
+			serializer.Populate(populater.CreateReader(), currentResourceInstance);
 
-                            // Recursion
-                            foreach (var arrayElem in ((JArray) embeddedObjectProperty.Value))
-                            {
-                                var resourceElem =
-                                    (IResource)
-                                        serializer.Deserialize(arrayElem.CreateReader(), collectionResourceType);
-                            
-                                dynamicCurrent.AddItem(resourceElem);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        var assignableProperty = objectType.GetProperties()
-                            .Where(_ => typeof (IResource).IsAssignableFrom(_.PropertyType))
-                            .FirstOrDefault(_ => _.PropertyType.Name.ToLower().Contains(embeddedObjectProperty.Name));
-                        if (assignableProperty != null)
-                        {
-                            // Recursion
-                            var resourceElem = serializer.Deserialize(embeddedObjectProperty.Value.CreateReader(),
-                                assignableProperty.PropertyType);
-                            assignableProperty.SetValue(currentResourceInstance, resourceElem);
-                        }
-                    }
-                }
-            }
+			if (jToken[ReservedPropertyNames.EmbeddedResources] != null)
+			{
+				JToken embeddedResourceObject = jToken[ReservedPropertyNames.EmbeddedResources];
+				foreach (var embeddedObjectProperty in embeddedResourceObject.Where(_ => _.GetType() == typeof(JProperty)).Cast<JProperty>())
+				{
+					if (embeddedObjectProperty.Value.GetType() == typeof(JArray))
+					{
+						if (objectType.Name.ToLower().Contains(embeddedObjectProperty.Name))
+						{
+							var dynamicCurrent = (dynamic)currentResourceInstance;
+							var itemsProperty = objectType.GetProperty("Items");
+							var collectionResourceType = itemsProperty.PropertyType.GetGenericArguments().First();
 
-            return currentResourceInstance;
-        }
+							// Recursion
+							foreach (var arrayElem in ((JArray)embeddedObjectProperty.Value))
+							{
+								var resourceElem =
+									(IResource)
+										serializer.Deserialize(arrayElem.CreateReader(), collectionResourceType);
 
-        public override bool CanConvert(Type objectType)
-        {
-            return typeof(IResource).IsAssignableFrom(objectType);
-        }
+								dynamicCurrent.AddItem(resourceElem);
+							}
+						}
+					}
+					else
+					{
+						var assignableProperty = objectType.GetProperties()
+							.Where(_ => typeof(IResource).IsAssignableFrom(_.PropertyType))
+							.FirstOrDefault(_ => _.PropertyType.Name.ToLower().Contains(embeddedObjectProperty.Name));
+						if (assignableProperty != null)
+						{
+							// Recursion
+							var resourceElem = serializer.Deserialize(embeddedObjectProperty.Value.CreateReader(),
+								assignableProperty.PropertyType);
+							assignableProperty.SetValue(currentResourceInstance, resourceElem);
+						}
+					}
+				}
+			}
 
-        public override bool CanRead => true;
+			return currentResourceInstance;
+		}
 
-        public override bool CanWrite => true;
-    }
+		public override bool CanConvert(Type objectType)
+		{
+			return typeof(IResource).IsAssignableFrom(objectType);
+		}
+
+		public override bool CanRead => true;
+
+		public override bool CanWrite => true;
+	}
 }
